@@ -66,10 +66,6 @@ channels = 1
 Nc = (rows//8*height//8)*channels #количество встраиваемых бит
 
 
-P = 40.0 #Порог различения
-PL = 2600.0
-PH = 40.0
-
 
 def segdiv(image):
     seg = []
@@ -98,14 +94,11 @@ def dct_blocks(seg):
 
 #обратное преобразование фурье выход float32 
 def idct_blocks(seg):
-    idct_seg = []
-    #seg_float32 = [np.array(block, dtype=np.float32) for block in seg]
     idct_seg = [cv2.idct(block) for block in seg]
-    #idct_normseg = [np.clip(block, 0, 255) for block in idct_seg]
     return idct_seg
 
+#склеивание изображения из блоков
 def segpair(idct_seg):
-    
     block_size = 8
     rows, height = image.shape
     print(height, rows, channels)
@@ -140,6 +133,10 @@ def sum_2d_array(arr):
 #A = sum_2d_array(s[0])
 
 
+
+P = 2.0 #Порог различения
+PL = 2600.0
+PH = 40.0
 #def embedding():
 #определение пригодности блока для встраивания 0 - не пригоден 1 - пригоден
 #в качестве аргумента принимает один элемент матрицы 8х8 float32
@@ -165,23 +162,27 @@ def iter_bits(bit_sequence):
         i = 0  # Инициализируем статическую переменную
     if (bit_sequence[i] == "1"):
         i += 1
-        return 1
+        return "1"
     else:
         i += 1
-        return 0
+        return "0"
 
 
 def embed_bits(dct_seg):
+
+    i = 0
+
     embed_image = dct_seg
-    for a in dct_seg:
+    for a in embed_image:
         if (block_suitability(a) == 1):
-            if (iter_bits == 1):
+            if (bit_sequence[i] == "1"):
                 wmin = min(a[u1,v1],a[u1,v1])
                 a[u3,v3] = wmin - P/2
                 if wmin == a[u1,v1]:
                     a[u1,v1] = a[u1,v1] + P/2
                 if wmin == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] + P/2
+                i += 1
             else:
                 wmax = max(a[u1,v1],a[u1,v1])
                 a[u3,v3] = wmax + P/2
@@ -189,17 +190,40 @@ def embed_bits(dct_seg):
                     a[u1,v1] = a[u1,v1] - P/2
                 if wmax == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] - P/2
+                i += 1
     return embed_image
 
 
 
 
 #iter_bits(bit_sequence)
-
 #block_suitability(dct_blocks(segdiv(image))[0])
-#image = segpair(idct_blocks(embed_bits(dct_blocks(segdiv(image)))))
-image = segpair(idct_blocks(dct_blocks(segdiv(image))))
+image_CVZ = segpair(idct_blocks(embed_bits(dct_blocks(segdiv(image)))))
 
-cv2.imshow('container', image)
+#image = segpair(idct_blocks(dct_blocks(segdiv(image))))
+
+
+#with open('output.txt', 'w') as file:
+def separ_bits(im):
+    cvz_list = []
+    segemb_dct = dct_blocks(segdiv(im))
+    for a in segemb_dct:
+        if (block_suitability(a) == 1):
+            a1 =a[u3,v3]
+            b = a[u1,v1]
+            c =a[u2,v2]
+
+            if a[u3,v3] < min(a[u1,v1], a[u2,v2]):
+                cvz_list.append('1')
+            elif a[u3,v3] > max(a[u1,v1], a[u2,v2]):
+                cvz_list.append('0')
+    return cvz_list
+
+
+crypted_data = separ_bits(image_CVZ)
+with open('output.txt', 'w') as file:
+    file.write("".join(map(str, crypted_data)))
+
+cv2.imshow('container', image_CVZ)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
