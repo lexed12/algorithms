@@ -4,6 +4,14 @@ import numpy as np
 #----------------------------------------------------------------------------------------
 #текстовое преобразование
 
+# Пример использования
+#original_text = 'input_message.txt'  # Имя файла с исходным текстом
+#output_filename = 'output.txt'  # Имя файла для сохранения результата
+
+def read_text_from_file(filename):
+    with open(filename, 'r', encoding='utf-8') as file:
+        return file.read()
+
 def text_to_bits(text):
     # Преобразуем каждый символ в битовую последовательность
     bits = ''.join(format(ord(char), '08b') for char in text)
@@ -28,25 +36,8 @@ def save_text_to_file(filename, text):
     with open(filename, 'w', encoding='utf-8') as file:
         file.write(text)
 
-# Пример использования
-input_filename = 'lorem_ipsum.txt'  # Имя файла с исходным текстом
-output_filename = 'output.txt'  # Имя файла для сохранения результата
 
-# Загружаем текст из файла
-text = load_text_from_file(input_filename)
-print("Исходный текст:", text)
 
-# Преобразуем текст в битовую последовательность
-bit_sequence = text_to_bits(text)
-print("Битовая последовательность:", bit_sequence)
-
-# Преобразуем битовую последовательность обратно в текст
-restored_text = bits_to_text(bit_sequence)
-print("Восстановленный текст:", restored_text)
-
-# Сохраняем восстановленный текст в файл
-save_text_to_file(output_filename, restored_text)
-print(f"Восстановленный текст сохранен в файл: {output_filename}")
 
 #----------------------------------------------------------------------------------------
 #преобразование изображения
@@ -69,17 +60,17 @@ def bits_to_image(bits, size, mode):
     img = Image.fromarray(img_array.astype('uint8'), mode)
     return img
 
-# Пример использования
-input_image_path = 'logo.jpg'  # Путь к исходному изображению
-output_image_path = 'output_image.jpg'  # Путь для сохранения восстановленного изображения
+# # Пример использования
+# input_image_path = 'logo.jpg'  # Путь к исходному изображению
+# output_image_path = 'output_image.jpg'  # Путь для сохранения восстановленного изображения
 
-# Преобразуем изображение в битовую последовательность
-bits, size, mode = image_to_bits(input_image_path)
-print(f"Битовая последовательность (первые 100 бит): {bits[:100]}...")
+# # Преобразуем изображение в битовую последовательность
+# bits, size, mode = image_to_bits(input_image_path)
+# print(f"Битовая последовательность (первые 100 бит): {bits[:100]}...")
 
-# Преобразуем битовую последовательность обратно в изображение
-restored_image = bits_to_image(bits, size, mode)
+# # Преобразуем битовую последовательность обратно в изображение
+# restored_image = bits_to_image(bits, size, mode)
 
-# Сохраняем восстановленное изображение
-restored_image.save(output_image_path)
-print(f"Восстановленное изображение сохранено в: {output_image_path}")
+# # Сохраняем восстановленное изображение
+# restored_image.save(output_image_path)
+# print(f"Восстановленное изображение сохранено в: {output_image_path}")

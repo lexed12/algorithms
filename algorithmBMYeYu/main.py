@@ -1,229 +1,121 @@
-import cv2
-import numpy as np
-#from PIL import Image
-
-
-#----------------------------------------------------------------------------------------
-#для переноса и вызова из другого файла
-def text_to_bits(text):
-    # Преобразуем каждый символ в битовую последовательность
-    bits = ''.join(format(ord(char), '08b') for char in text)
-    return bits
-
-def bits_to_text(bits):
-    # Разделяем битовую последовательность на группы по 8 бит
-    chunks = [bits[i:i+8] for i in range(0, len(bits), 8)]
-    
-    # Преобразуем каждую группу бит в символ
-    text = ''.join(chr(int(chunk, 2)) for chunk in chunks)
-    return text
-
-# Загрузка текста из файла
-def load_text_from_file(filename):
-    with open(filename, 'r', encoding='utf-8') as file:
-        text = file.read()
-    return text
-
-# Сохранение текста в файл
-def save_text_to_file(filename, text):
-    with open(filename, 'w', encoding='utf-8') as file:
-        file.write(text)
-
-# Пример использования
-input_filename = 'lorem_ipsum.txt'  # Имя файла с исходным текстом
-output_filename = 'output.txt'  # Имя файла для сохранения результата
-
-# Загружаем текст из файла
-text = load_text_from_file(input_filename)
-print("Исходный текст:", text)
-
-# Преобразуем текст в битовую последовательность
-bit_sequence = text_to_bits(text)
-print("Битовая последовательность:", bit_sequence)
-
-# Преобразуем битовую последовательность обратно в текст
-restored_text = bits_to_text(bit_sequence)
-print("Восстановленный текст:", restored_text)
-
-# Сохраняем восстановленный текст в файл
-save_text_to_file(output_filename, restored_text)
-print(f"Восстановленный текст сохранен в файл: {output_filename}")
-
-#----------------------------------------------------------------------------------------
-
-
-
-
-
-print("Hello, World!")
-
+from bmeu import *
+from translate import *
+import math
 
 image = cv2.cvtColor(cv2.imread('les.jpg'), cv2.COLOR_BGR2GRAY)
 rows, height = image.shape
-channels = 1
 
 
-Nc = (rows//8*height//8)*channels #количество встраиваемых бит
+def bits_to_numbers(bits):
+    return [int(bit) for bit in bits]
 
+def calculate_mse(original, decoded):
+    if len(original) != len(decoded):
+        raise ValueError("Длины исходного и декодированного сообщений должны совпадать.")
+    
+    squared_errors = [(o - d) ** 2 for o, d in zip(original, decoded)]
+    mse = sum(squared_errors) / len(original)
+    return mse
 
+def read_bits_from_file(filename, max_bits=None):
+    """Читает биты из файла и возвращает строку битов."""
+    with open(filename, 'r') as file:
+        bits = file.read().strip()  # Читаем всё содержимое файла
+    if max_bits is not None:
+        bits = bits[:max_bits]  # Обрезаем, если указано ограничение
+    return bits
 
-def segdiv(image):
-    seg = []
-    block_size = 8
-    rows, height = image.shape
-    print(height, rows, channels)
-    Nc = (rows//8*height//8)*channels #количество встраиваемых бит
-    for c in range(0, channels):
-        for x in range(0, rows, block_size):
-            for y in range(0, height, block_size):
-                end_x = x + block_size
-                end_y = y + block_size
-                
-                # Проверяем, чтобы блок не выходил за границы изображения
-                if end_x <= rows and end_y <= height:
-                    seg.append(image[x:end_x, y:end_y])
-    return seg
-
-#преобраззование фурье 
-#вход в uint8 выход в float32
-def dct_blocks(seg):
-    dct_seg = []
-    seg_float32 = [np.array(block, dtype=np.float32) for block in seg]
-    dct_seg = [cv2.dct(block/255.0) for block in seg_float32]
-    return dct_seg
-
-#обратное преобразование фурье выход float32 
-def idct_blocks(seg):
-    idct_seg = [cv2.idct(block) for block in seg]
-    return idct_seg
-
-#склеивание изображения из блоков
-def segpair(idct_seg):
-    block_size = 8
-    rows, height = image.shape
-    print(height, rows, channels)
-    reconstructed_image = image
-    Nc = (rows//8*height//8)*channels #количество встраиваемых бит
-    index = 0
-    for c in range(0, channels):
-        for x in range(0, rows, block_size):
-            for y in range(0, height, block_size):
-                end_x = x + block_size
-                end_y = y + block_size
-                block = idct_seg[index]
-                block = np.clip(block*255, 0, 255)  # Масштабируем и обрезаем значения
-                block = block.astype(np.uint8)  # Преобразуем в uint8
-                # Проверяем, чтобы блок не выходил за границы изображения
-                if end_x <= rows and end_y <= height:
-                    reconstructed_image[x:end_x, y:end_y] = block
-                    index += 1            
-    return reconstructed_image
-
-#расчет суммы двумерного массива с вычетанием DC коэффициента
-def sum_2d_array(arr):
-    total_sum = 0
-    for row in arr:
-        for element in row:
-            total_sum += abs(element)
-    total_sum = total_sum - arr[0,0]
-    return total_sum
-
-
-#s = dct_blocks(segdiv(image))  
-#A = sum_2d_array(s[0])
-
-
-
-P = 2.0 #Порог различения
-PL = 2600.0
-PH = 40.0
-#def embedding():
-#определение пригодности блока для встраивания 0 - не пригоден 1 - пригоден
-#в качестве аргумента принимает один элемент матрицы 8х8 float32
-def block_suitability(segItem_f32):
-    sum_dct = sum_2d_array(segItem_f32)
-    sum_dct = sum_dct*255
-    if PH < sum_dct < PL:
-        suitable = 1
+def limit_decoded_bits(original_bits, decoded_length):
+    """Ограничивает исходное сообщение по длине декодированного."""
+    if len(original_bits) > decoded_length:
+        return original_bits[:decoded_length]  # Обрезаем лишние биты
     else:
-        suitable = 0
-    return suitable
+        return original_bits.ljust(decoded_length, '0')  # Дополняем нулями
 
-u1 = 7
-v1 = 3
-u2 = 5
-v2 = 5
-u3 = 3
-v3 = 7
+def calculate_psnr(image1, image2):
+    """
+    Вычисляет PSNR между двумя изображениями.
 
+    :param image1: Исходное изображение (numpy array).
+    :param image2: Закодированное изображение (numpy array).
+    :return: Значение PSNR в децибелах (dB).
+    """
+    # Проверяем, что изображения имеют одинаковый размер
+    if image1.shape != image2.shape:
+        raise ValueError("Изображения должны иметь одинаковый размер.")
 
-def iter_bits(bit_sequence):
-    if not hasattr(iter_bits, "i"):  # Проверяем, существует ли атрибут
-        i = 0  # Инициализируем статическую переменную
-    if (bit_sequence[i] == "1"):
-        i += 1
-        return "1"
-    else:
-        i += 1
-        return "0"
+    # Вычисляем MSE
+    mse = np.mean((image1 - image2) ** 2)
 
+    # Если MSE равно 0, PSNR бесконечен
+    if mse == 0:
+        return float('inf')
 
-def embed_bits(dct_seg):
+    # Максимальное значение пикселя (для 8-битных изображений это 255)
+    max_pixel = 255.0
 
-    i = 0
+    # Вычисляем PSNR
+    psnr = 10 * math.log10((max_pixel ** 2) / mse)
+    return psnr
 
-    embed_image = dct_seg
-    for a in embed_image:
-        if (block_suitability(a) == 1):
-            if (bit_sequence[i] == "1"):
-                wmin = min(a[u1,v1],a[u1,v1])
-                a[u3,v3] = wmin - P/2
-                if wmin == a[u1,v1]:
-                    a[u1,v1] = a[u1,v1] + P/2
-                if wmin == a[u2,v2]:
-                    a[u2,v2] = a[u2,v2] + P/2
-                i += 1
-            else:
-                wmax = max(a[u1,v1],a[u1,v1])
-                a[u3,v3] = wmax + P/2
-                if wmax == a[u1,v1]:
-                    a[u1,v1] = a[u1,v1] - P/2
-                if wmax == a[u2,v2]:
-                    a[u2,v2] = a[u2,v2] - P/2
-                i += 1
-    return embed_image
+def calculate_correct_bits_percentage(original_bits, decoded_bits):
+    """
+    Вычисляет процент верных бит между двумя битовыми последовательностями.
+    
+    :param original_bits: Исходная битовая последовательность (строка из 0 и 1).
+    :param decoded_bits: Декодированная битовая последовательность (строка из 0 и 1).
+    :return: Процент верных бит.
+    """
+    if len(original_bits) != len(decoded_bits):
+        raise ValueError("Длины исходной и декодированной последовательностей должны совпадать.")
+    
+    # Считаем количество совпавших бит
+    correct_bits = sum(o == d for o, d in zip(original_bits, decoded_bits))
+    
+    # Вычисляем процент верных бит
+    total_bits = len(original_bits)
+    percentage = (correct_bits / total_bits) * 100
+    
+    return percentage
 
-
-
-
-#iter_bits(bit_sequence)
-#block_suitability(dct_blocks(segdiv(image))[0])
-image_CVZ = segpair(idct_blocks(embed_bits(dct_blocks(segdiv(image)))))
-
-#image = segpair(idct_blocks(dct_blocks(segdiv(image))))
+save_text_to_file('input_message_bit.txt',text_to_bits(read_text_from_file('input_message.txt')))
+bit_sequence = read_text_from_file('input_message_bit.txt')
 
 
-#with open('output.txt', 'w') as file:
-def separ_bits(im):
-    cvz_list = []
-    segemb_dct = dct_blocks(segdiv(im))
-    for a in segemb_dct:
-        if (block_suitability(a) == 1):
-            a1 =a[u3,v3]
-            b = a[u1,v1]
-            c =a[u2,v2]
-
-            if a[u3,v3] < min(a[u1,v1], a[u2,v2]):
-                cvz_list.append('1')
-            elif a[u3,v3] > max(a[u1,v1], a[u2,v2]):
-                cvz_list.append('0')
-    return cvz_list
+container = encode(image, bit_sequence)
+decode(container)
 
 
-crypted_data = separ_bits(image_CVZ)
-with open('output.txt', 'w') as file:
-    file.write("".join(map(str, crypted_data)))
+# cv2.imshow('container', container)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
 
-cv2.imshow('container', image_CVZ)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# Чтение исходного сообщения из файла
+original_bits = read_bits_from_file('input_message_bit.txt')
+
+# Чтение декодированного сообщения из файла
+decoded_bits = read_bits_from_file('output_message_bit.txt', max_bits=len(original_bits))
+save_text_to_file("output_message.txt",bits_to_text(decoded_bits))
+
+# Ограничиваем декодированное сообщение по длине исходного
+original_bits = limit_decoded_bits(original_bits, len(decoded_bits))
+
+# Преобразуем биты в числа
+original_numbers = bits_to_numbers(original_bits)
+decoded_numbers = bits_to_numbers(decoded_bits)
+
+# Вычисляем MSE
+mse = calculate_mse(original_numbers, decoded_numbers)
+print("MSE:", mse)
+
+# Пример использования
+# Загружаем изображения
+original_image = cv2.imread('les.jpg', cv2.IMREAD_GRAYSCALE)
+encoded_image = cv2.imread('container.jpg', cv2.IMREAD_GRAYSCALE)
+
+# Вычисляем PSNR
+psnr_value = calculate_psnr(original_image, container)
+print(f"PSNR: {psnr_value:.2f} dB")
+
+percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
+print(f"Процент верных бит: {percentage:.2f}%")
