@@ -1,10 +1,15 @@
+import cv2
+import numpy as np
 from bmeu import *
 from translate import *
 import math
+import os
 
-image = cv2.cvtColor(cv2.imread('les.jpg'), cv2.COLOR_BGR2GRAY)
+
+
+
+image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/les.jpg'), cv2.COLOR_BGR2GRAY)
 rows, height = image.shape
-
 
 def bits_to_numbers(bits):
     return [int(bit) for bit in bits]
@@ -71,31 +76,27 @@ def calculate_correct_bits_percentage(original_bits, decoded_bits):
     
     # Считаем количество совпавших бит
     correct_bits = sum(o == d for o, d in zip(original_bits, decoded_bits))
-    
+    print("Количество правильных бит: " ,correct_bits)
     # Вычисляем процент верных бит
     total_bits = len(original_bits)
     percentage = (correct_bits / total_bits) * 100
     
     return percentage
 
-save_text_to_file('input_message_bit.txt',text_to_bits(read_text_from_file('input_message.txt')))
-bit_sequence = read_text_from_file('input_message_bit.txt')
+save_text_to_file('./algorithmBMYeYu/input_message_bit.txt',text_to_bits(read_text_from_file('./algorithmBMYeYu/input_message.txt')))
+bit_sequence = read_text_from_file('./algorithmBMYeYu/input_message_bit.txt')
 
 
 container = encode(image, bit_sequence)
 decode(container)
 
 
-# cv2.imshow('container', container)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
-
 # Чтение исходного сообщения из файла
-original_bits = read_bits_from_file('input_message_bit.txt')
+original_bits = read_bits_from_file('./algorithmBMYeYu/input_message_bit.txt')
 
 # Чтение декодированного сообщения из файла
-decoded_bits = read_bits_from_file('output_message_bit.txt', max_bits=len(original_bits))
-save_text_to_file("output_message.txt",bits_to_text(decoded_bits))
+decoded_bits = read_bits_from_file('./algorithmBMYeYu/output_message_bit.txt', max_bits=len(original_bits))
+save_text_to_file("./algorithmBMYeYu/output_message.txt",bits_to_text(decoded_bits))
 
 # Ограничиваем декодированное сообщение по длине исходного
 original_bits = limit_decoded_bits(original_bits, len(decoded_bits))
@@ -110,12 +111,13 @@ print("MSE:", mse)
 
 # Пример использования
 # Загружаем изображения
-original_image = cv2.imread('les.jpg', cv2.IMREAD_GRAYSCALE)
-encoded_image = cv2.imread('container.jpg', cv2.IMREAD_GRAYSCALE)
+original_image = cv2.imread('./algorithmBMYeYu/les.jpg', cv2.IMREAD_GRAYSCALE)
+encoded_image = cv2.imread('./algorithmBMYeYu/encoded.jpg', cv2.IMREAD_GRAYSCALE)
 
-# Вычисляем PSNR
+# Вычисляыем PSNR
 psnr_value = calculate_psnr(original_image, container)
 print(f"PSNR: {psnr_value:.2f} dB")
 
 percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
 print(f"Процент верных бит: {percentage:.2f}%")
+
