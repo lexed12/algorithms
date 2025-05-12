@@ -8,7 +8,7 @@ import os
 
 
 
-image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/les.jpg'), cv2.COLOR_BGR2GRAY)
+image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/cat.png'), cv2.COLOR_BGR2GRAY)
 rows, height = image.shape
 
 def bits_to_numbers(bits):
@@ -87,12 +87,13 @@ save_text_to_file('./algorithmBMYeYu/input_message_bit.txt',text_to_bits(read_te
 bit_sequence = read_text_from_file('./algorithmBMYeYu/input_message_bit.txt')
 
 
-container = encode(image, bit_sequence)
+container = encode(image, bit_sequence, 40)
 decode(container)
 
 
 # Чтение исходного сообщения из файла
 original_bits = read_bits_from_file('./algorithmBMYeYu/input_message_bit.txt')
+test_original_bits = read_bits_from_file('./algorithmBMYeYu/test_input_message_bit.txt')
 
 # Чтение декодированного сообщения из файла
 decoded_bits = read_bits_from_file('./algorithmBMYeYu/output_message_bit.txt', max_bits=len(original_bits))
@@ -100,6 +101,7 @@ save_text_to_file("./algorithmBMYeYu/output_message.txt",bits_to_text(decoded_bi
 
 # Ограничиваем декодированное сообщение по длине исходного
 original_bits = limit_decoded_bits(original_bits, len(decoded_bits))
+
 
 # Преобразуем биты в числа
 original_numbers = bits_to_numbers(original_bits)
@@ -112,12 +114,15 @@ print("MSE:", mse)
 # Пример использования
 # Загружаем изображения
 original_image = cv2.imread('./algorithmBMYeYu/les.jpg', cv2.IMREAD_GRAYSCALE)
-encoded_image = cv2.imread('./algorithmBMYeYu/encoded.jpg', cv2.IMREAD_GRAYSCALE)
+encoded_image = cv2.imread('./algorithmBMYeYu/.jpg', cv2.IMREAD_GRAYSCALE)
 
-# Вычисляыем PSNR
-psnr_value = calculate_psnr(original_image, container)
-print(f"PSNR: {psnr_value:.2f} dB")
+# # Вычисляем PSNR
+# psnr_value = calculate_psnr(original_image, encoded_image)
+# print(f"PSNR: {psnr_value:.2f} dB")
 
-percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
-print(f"Процент верных бит: {percentage:.2f}%")
 
+
+# percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
+# print(f"Процент верных бит: {percentage:.2f}%")
+cv2.imshow('embedded image',encoded_image)
+cv2.waitKey(0)

@@ -1,13 +1,12 @@
 import cv2
 import numpy as np
-#from translate import bit_sequence
+from translate import *
 #from PIL import Image
 
 
 print("Hello, World!")
-
-
 channels = 1
+
 def zigzag_transform(matrix):
     """
     Корректное зигзаг-преобразование для блока 8x8.
@@ -158,9 +157,9 @@ def sum_2d_array(arr):
 
 
 
-P = 40.0 #Порог различения
+P = 200.0 #Порог различения
 PL = 5000.0 #Порог сверху
-PH = 5.0 #Порог снизу
+PH = 0.0 #Порог снизу
 
 u1 = 6
 v1 = 2
@@ -171,13 +170,15 @@ v3 = 6
 
 #определение пригодности блока для встраивания 0 - не пригоден 1 - пригоден
 #в качестве аргумента принимает один элемент матрицы 8х8 float32
+
+
 def block_suitability(segItem_f32):
     sum_dctLF = sum(abs(zigzag_transform(segItem_f32)[1:27]))*255.0
     sum_dctHF = sum(abs(zigzag_transform(segItem_f32)[43:63]))*255.0
     if sum_dctLF < PL and sum_dctHF > PH:
         suitable = 1
     else:
-        suitable = 1#0
+        suitable = 0
     return suitable
   
 
@@ -187,7 +188,7 @@ def print_array(array):
 
 
 P_dif = (P/2)/255
-def embed_bits(dct_seg, bit_sequence):
+def embed_bits(dct_seg, bit_sequence,N_bit):
     i = 0
     embed_image = dct_seg
     for a in embed_image:
@@ -199,7 +200,6 @@ def embed_bits(dct_seg, bit_sequence):
                     a[u1,v1] = a[u1,v1] + P_dif
                 if wmin == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] + P_dif
-                i += 1
             else:
                 wmax = max(a[u1,v1],a[u2,v2])
                 a[u3,v3] = wmax + P_dif
@@ -207,21 +207,19 @@ def embed_bits(dct_seg, bit_sequence):
                     a[u1,v1] = a[u1,v1] - P_dif
                 if wmax == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] - P_dif
-                i += 1
     return embed_image
 
 def separ_bits(im):
     cvz_list = []
     segemb_dct = dct_blocks(segdiv(im))
-    i = 0
     for a in segemb_dct:
         if (block_suitability(a) == 1):
             a1 =a[u3,v3]
             b = a[u1,v1]
             c = a[u2,v2]
-            if a[u3,v3] < min(a[u1,v1], a[u2,v2]):
+            if  min(a[u1,v1], a[u2,v2]) - a[u3,v3] >= 0.001:
                 cvz_list.append('0')
-            elif a[u3,v3] > max(a[u1,v1], (a[u2,v2])):
+            elif a[u3,v3] - max(a[u1,v1], (a[u2,v2])) >= 0.001:
                 cvz_list.append('1')
     return cvz_list
 
@@ -230,15 +228,64 @@ def fill_bits(image_cvz):
     with open('./algorithmBMYeYu/output_message_bit.txt', 'w') as file:
         file.write("".join(map(str, crypted_data)))
 
+def form_sequence_bit(bit_sequence, N_bit, output_file_path):
+    with open(output_file_path, 'wb') as file:
+        # Берем первые N_bit битов
+        truncated_bits = bit_sequence[:N_bit]
+        
+        # Дополняем нулями до целого числа байтов
+        padding = 8 - (len(truncated_bits) % 8)
+        if padding != 8:
+            truncated_bits += '0' * padding
+        
+        # Конвертируем биты в байты
+        byte_array = bytearray()
+        for i in range(0, len(truncated_bits), 8):
+            byte = truncated_bits[i:i+8]
+            byte_array.append(int(byte, 2))
+        
+        # Добавляем нулевой байт в конце
+        byte_array.append(0)
+        
+        # Записываем в файл
+        file.write(byte_array)
 
 
-def encode(image, bit_sequence):
-    image_cvz = segpair(idct_blocks(embed_bits(dct_blocks(segdiv(image)), bit_sequence)),image)
-    cv2.imwrite('./algorithmBMYeYu/encoded.jpg', image_cvz, [cv2.IMWRITE_JPEG_QUALITY, 100])
+    return byte_array
+
+def form_sequence_symb(char_sequence, N_char, output_file_path):
+    """
+    Записывает в файл N_char символов из char_sequence и добавляет \0 в конце
+    
+    :param char_sequence: Исходная последовательность символов (str или list)
+    :param N_char: Количество символов для записи
+    :param output_file_path: Путь к выходному файлу
+    """
+    with open(output_file_path, 'w', encoding='utf-8') as file:
+        # Берем первые N_char символов
+        truncated_chars = char_sequence[:N_char]
+        
+        # Записываем символы в файл
+        file.write(truncated_chars)
+        
+        # Добавляем нулевой символ в конце
+        file.write('\0')
+    return truncated_chars
+
+def encode(image, bit_sequence, N_bit):
+    #encoded_text = form_sequence_bit(bit_sequence, N_bit, "output.txt")  # Записываем 6 байт (48 бит)
+    image_cvz = segpair(idct_blocks(embed_bits(dct_blocks(segdiv(image)), bit_sequence, N_bit)),image)
+    cv2.imwrite('./algorithmBMYeYu/encoded.jpg', image_cvz, [cv2.IMWRITE_JPEG_QUALITY, 95])
     return image_cvz
 
 def decode(image_cvz):
     fill_bits(image_cvz)
 
+# # Пример 1: Из текста
+# text = "Secret"
+# bit_sequence = text_to_bits(text)  # Получаем строку битов
+# form_sequence_bit(bit_sequence, 40, "output.txt")  # Записываем 6 байт (48 бит)
 
-
+# # Пример 2: Из готовой битовой последовательности
+# bits = "0100100001100101011011000110110001101111"  # "Hello"
+# form_sequence_bit(bits, 32, "hello.txt")  # Записываем 5 байт (40 бит)
