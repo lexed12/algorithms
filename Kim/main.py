@@ -3,7 +3,7 @@ import numpy as np
 #from PIL import Image
 import pywt
 from typing import Dict, List, Tuple
-import translate
+from translate import *
 
 alf3sa = 0.02
 alf3 = 0.1
@@ -94,6 +94,9 @@ def process_wavelet_coeffs(coeffs, thresholds, alpha, masCVZ):
         alpha (dict): Коэффициенты {'alf3': float, 'alf2': float, 'alf1': float, 'alf3sa': float}
         masCVZ (np.array): Массив значений для модификации
     """
+    masCVZ = [int(c) for c in masCVZ]
+    message = [x if x != 0 else -1 for x in masCVZ]
+
     modified_coeffs = coeffs.copy()
     p = 0  # Индекс для masCVZ
     
@@ -115,7 +118,7 @@ def process_wavelet_coeffs(coeffs, thresholds, alpha, masCVZ):
             # Векторизованная обработка (быстрее чем вложенные циклы)
             mask = current_coeff > threshold
             if np.any(mask):
-                modification = alpha_val * current_coeff[mask] * masCVZ[p:p+np.sum(mask)]
+                modification = alpha_val * current_coeff[mask] * message[p:p+np.sum(mask)]
                 current_coeff[mask] += modification
                 p += np.sum(mask)
     
@@ -165,7 +168,7 @@ def list2dict_coeff(coeffs,
 if __name__ == "__main__":
     image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
     cv2.imshow('original1', image)
-    message = 1
+    message = text_to_bits(read_text_from_file('./Kim/input_message.txt'))
     # Получаем C, S и коэффициенты
     C, S, coeffs = haar_2d_decomposition_with_C_S(image, levels=3)
     T1, T2, T3 = find_top3_from_coeffs(coeffs)
