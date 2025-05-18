@@ -6,8 +6,10 @@ from typing import Dict, List, Tuple
 print("Hello, World!")
 
 image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/cat.png'), cv2.COLOR_BGR2GRAY)
+cv2.imshow('original1', image)
 rows, height = image.shape
 channels = 1
+
 #--------------------------------------------------------------------------
 #Разделение изображения
 def segdiv(image):
@@ -73,13 +75,6 @@ def classify_block(block):
         sharpness = 'smooth'
         return {'smooth',mean_grad}    #Плавный контраст
 
-def list_classify_block(image):
-    seg_class = []
-    seg = segdiv(image)
-    for i in seg:
-        seg_class.append(classify_block(i))
-    return seg_class
-
 def pixel_classify(block):
     zone_block = np.zeros((8, 8), dtype=int)  # Создаём пустой блок 8x8
     const_B = 0.01
@@ -95,10 +90,12 @@ def pixel_classify(block):
                 else:
                     zone_block[i, j] = 3
             elif sharp == 'noise':
-                if block[i, j] <= mean_grad:
+                if block[i, j] < mean_grad:
                     zone_block[i, j] = 1
-                else:
+                elif block[i, j] > mean_grad:
                     zone_block[i, j] = 2
+                elif block[i, j] == mean_grad:
+                    zone_block[i, j] = 3
                     
     return zone_block
 
@@ -163,12 +160,8 @@ def create_random_mask(block_size: int, subblock_size: int, seed: int = None) ->
 
 #--------------------------------------------------------------------------
 #Суммирование
-def sum_regions(block, mask):
-    sum0 = np.sum(block[mask == 0])
-    sum1 = np.sum(block[mask == 1])
-    return sum0, sum1
 
-def meansum_insert(block_image, zone_mask, category_mask, message):
+def meansum_insert(block, zone_mask, category_mask, message):
     """
     Сканирующее складывание: вычисляет сумму и среднее для зон A/Z и категорий 1/2.
     
@@ -190,7 +183,8 @@ def meansum_insert(block_image, zone_mask, category_mask, message):
             [Среднее зоны Z (категория 1), Среднее зоны Z (категория 2)]
         ]
     """
-# Инициализация результата
+    # Инициализация результата
+    block_image = block
     E = 15.0
     result = np.zeros((2, 2), dtype=float)
     
@@ -230,8 +224,16 @@ def meansum_insert(block_image, zone_mask, category_mask, message):
     L = [0.0, 0.0]
     l1 = [0.0, 0.0]
     x = 0
-    for x in range (2):
-        L[x] = (result[0][x]*n[0][x]+result[1][x]*n[1][x])/(n[0][x]+n[1][x])
+    eps = 1e-10  # Малое число для стабильности
+    for x in range(2):
+        denominator = n[0][x] + n[1][x] + eps  # Добавляем eps, чтобы избежать деления на 0
+        
+        # Проверка на NaN/inf (на всякий случай)
+        if np.isnan(denominator) or np.isinf(denominator):
+            L[x] = 0  # Или другое значение по умолчанию
+        else:
+            L[x] = (result[0][x] * n[0][x] + result[1][x] * n[1][x]) / denominator
+        
         if message == 1:
             A = np.array([[n[x, 0], n[x, 1]], [1, -1]])  # Матрица коэффициентов
             b = np.array([L[x] * (n[x, 0] + n[x, 1]), E])  # Вектор правой части
@@ -240,20 +242,21 @@ def meansum_insert(block_image, zone_mask, category_mask, message):
             A = np.array([[n[x, 0], n[x, 1]], [-1, 1]])  # Матрица коэффициентов
             b = np.array([L[x] * (n[x, 0] + n[x, 1]), E])  # Вектор правой части
             l1[x] = np.linalg.lstsq(A, b, rcond=None)[0]  # Решение системы
+
     l1t = np.array(l1).T
-    result = l1t-L
-    
+    result = l1t - L
     return result
 
 def modification_pixel(block_image, zone_mask, category_mask, message):
     N = 8
     i = 0
     j = 0
-    block = block_image;
+    block = block_image
     # Определяем маски для зон A и Z
     is_zone_A = (zone_mask == 0)
     insert_result = meansum_insert(block_image, zone_mask, category_mask, message)
-    
+
+
     # Определяем маски для категорий 1 и 2
     is_cat1 = (category_mask == 1)
     is_cat2 = (category_mask == 2)
@@ -261,13 +264,13 @@ def modification_pixel(block_image, zone_mask, category_mask, message):
     for i in range(N):
         for j in range(N):
             if is_zone_A[i][j] == True and is_cat1[i][j] == True: #A1
-                block[i][j] = block[i][j] + insert_result[1][1]
+                block[i][j] = block[i][j] + insert_result[0][0]
             if is_zone_A[i][j] == False and is_cat1[i][j] == True: #Z1
-                block[i][j] = block[i][j] + insert_result[1][2]
+                block[i][j] = block[i][j] + insert_result[1][0]
             if is_zone_A[i][j] == True and is_cat2[i][j] == True: #A2
-                block[i][j] = block[i][j] + insert_result[2][1]
+                block[i][j] = block[i][j] + insert_result[0][1]
             if is_zone_A[i][j] == False and is_cat2[i][j] == True: #Z2
-                block[i][j] = block[i][j] + insert_result[2][2]
+                block[i][j] = block[i][j] + insert_result[1][1]
     return block
 
 #склеивание изображения из блоков
@@ -275,7 +278,7 @@ def segpair(idct_seg, image):
     block_size = 8
     rows, height = image.shape
     print(height, rows, channels)
-    reconstructed_image = image
+    reconstructed_image = image.copy()
     index = 0
     for x in range(0, rows, block_size):
         for y in range(0, height, block_size):
@@ -284,13 +287,93 @@ def segpair(idct_seg, image):
             # Проверяем, чтобы блок не выходил за границы изображения
             if end_x <= rows and end_y <= height:
                 block = idct_seg[index]
-                block = np.clip(block*255, 0, 255)  # Масштабируем и обрезаем значения
+                block = np.clip(block, 0, 255)  # Масштабируем и обрезаем значения
                 block = block.astype(np.uint8)  # Преобразуем в uint8
                 reconstructed_image[x:end_x, y:end_y] = block
                 index += 1
     return reconstructed_image
 
-def embedding(image):
+def numerator_pixel_dec(block,zone_mask,category_mask):
+    
+    # Инициализация результата
+    block_image = block
+    result = np.zeros((2, 2), dtype=float)
+    
+    # Определяем маски для зон A и Z
+    is_zone_A = (zone_mask == 0)
+    is_zone_Z = (zone_mask == 1)
+    
+    # Определяем маски для категорий 1 и 2
+    is_cat1 = (category_mask == 1)
+    is_cat2 = (category_mask == 2)
+    
+    # Средние для зоны A по категориям
+    a_cat1_pixels = block_image[is_zone_A & is_cat1]
+    a_cat2_pixels = block_image[is_zone_A & is_cat2]
+    result[0, 0] = np.mean(a_cat1_pixels) if a_cat1_pixels.size > 0 else 0  # A, категория 1
+    result[0, 1] = np.mean(a_cat2_pixels) if a_cat2_pixels.size > 0 else 0  # A, категория 2
+    
+    # Средние для зоны Z по категориям
+    z_cat1_pixels = block_image[is_zone_Z & is_cat1]
+    z_cat2_pixels = block_image[is_zone_Z & is_cat2]
+    result[1, 0] = np.mean(z_cat1_pixels) if z_cat1_pixels.size > 0 else 0  # Z, категория 1
+    result[1, 1] = np.mean(z_cat2_pixels) if z_cat2_pixels.size > 0 else 0  # Z, категория 2
+    
+
+    nA1 = a_cat1_pixels.size
+    nA2 = a_cat2_pixels.size
+    nZ1 = z_cat1_pixels.size
+    nZ2 = z_cat2_pixels.size
+
+    # Альтернативный вариант с явным указанием осей:
+    n = np.zeros((2, 2), dtype=int)
+    n[0, 0] = nA1  # A, категория 1
+    n[0, 1] = nA2  # A, категория 2
+    n[1, 0] = nZ1  # Z, категория 1
+    n[1, 1] = nZ2  # Z, категория 2
+
+    return n,result
+
+def dif_mean_dec(matrix):
+    """
+    Вычисляет разность между строками матрицы 2x2.
+    
+    Параметры:
+        matrix: list[list] - матрица 2x2 (например, [[a, b], [c, d]])
+    
+    Возвращает:
+        list - [a - c, b - d]
+    """
+    return [
+        matrix[0][0] - matrix[1][0],  # Разность первых элементов столбцов
+        matrix[0][1] - matrix[1][1]   # Разность вторых элементов столбцов
+    ]
+
+def decis_maker_dec(matrix,n):
+    message = 'n'
+    sigma1 = matrix[0]
+    sigma2 = matrix[1]
+    ed = 0.05
+    if sigma1*sigma2 > ed:
+        if sigma1 > 0 and sigma2 > 0:
+            message = '1'
+        if sigma1 < 0 and sigma2 < 0:
+            message = '0'
+    elif sigma1*sigma2 < -ed:
+        sigma = sigma1*(n[0,0]+n[1,0])+sigma2*(n[0,1]+n[1,1])
+        if sigma > 0:
+            message = '1'
+        if sigma < 0:
+            message = '0'
+    elif -ed <= sigma1*sigma2 <= ed:
+        sigma = max(abs(sigma1),abs(sigma2))
+        if sigma > 0:
+            message = '1'
+        elif sigma <= 0: #Не может быть равно нулю, это означает что значение бита неопределенное
+            message = '0'
+    return message
+
+def encode(image):
     secret_message = 1
     block_emb = []
     block_image = segdiv(image)
@@ -298,15 +381,29 @@ def embedding(image):
     for block in block_image:
         block_emb.append(modification_pixel(block,mask,pixel_classify(block),secret_message))
     embed = segpair(block_emb, image)
-    cv2.imshow("embed",embed)        
+    return embed    
 
-
+def decode(image_cvz):
+    message = []
+    block_image = segdiv(image_cvz)
+    mask = create_checker_mask(8,4)
+    for block in block_image:
+        n,result = numerator_pixel_dec(block, mask, pixel_classify(block))
+        sigma = dif_mean_dec(result)
+        message.append(decis_maker_dec(sigma,n))
+    return message
 
 
 #--------------------------------------------------------------------------
 #Вызов функции
 if __name__ == "__main__":
-    embedding(image)
+    img = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/cat.png'), cv2.COLOR_BGR2GRAY)
+    img1 = segpair(segdiv(img),img)
+    embed = encode(image)
+    message = decode(embed)
+    cv2.imshow('original', img1)
+    cv2.imshow("embed", embed)
+    cv2.waitKey(0)
     
     
     
