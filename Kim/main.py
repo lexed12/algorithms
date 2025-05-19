@@ -222,10 +222,7 @@ def inverse_haar_transform(modified_coeffs, original_structure=None):
 
     return reconstructed
 
-if __name__ == "__main__":
-    image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
-    cv2.imshow('original1', image)
-    message = text_to_bits(read_text_from_file('./Kim/input_message.txt'))
+def encode(image, message):
     # Получаем C, S и коэффициенты
     C, S, coeffs = haar_2d_decomposition_with_C_S(image, levels=3)
     T1, T2, T3 = find_top3_from_coeffs(coeffs)
@@ -235,20 +232,101 @@ if __name__ == "__main__":
 
     coeffs_dict, thresholds, alpha, sizes = list2dict_coeff(coeffs, T3, T2, T1)
     modified_coeffs = process_wavelet_coeffs(coeffs_dict, thresholds, alpha, message)
+    embed = inverse_haar_transform(modified_coeffs, coeffs)
+    return embed
 
 
-    # Вычисляем общий размер всех коэффициентов
-    # total_size = 0
-    # for coeff in ['sa3', 'sh3', 'sv3', 'sd3', 'sh2', 'sv2', 'sd2', 'sh1', 'sv1', 'sd1']:
-    #     if coeff in modified_coeffs:
-    #         total_size += modified_coeffs[coeff].size  # Используем .size вместо len()
-
-    # Создаем вектор нужного размера
-    #C = np.zeros(total_size)
 
 
-    #С = fill_C_vector_fast(C,modified_coeffs)
-    cv2.imshow('embed', inverse_haar_transform(modified_coeffs, coeffs))
+def extract_watermark_all_fast(original_coeffs, modified_coeffs, thresholds, alpha):
+    """
+    Извлекает ЦВЗ из всех модифицированных коэффициентов
+    
+    Параметры:
+        original_coeffs (dict): Исходные коэффициенты {'sa3': ..., 'sh3': ..., ...}
+        modified_coeffs (dict): Модифицированные коэффициенты
+        thresholds (dict): Пороги {'T1': float, 'T2': float, 'T3': float}
+        alpha (dict): Коэффициенты усиления {'alf1': float, 'alf2': float, 'alf3': float, 'alf3sa': float}
+        
+    Возвращает:
+        np.array: Объединенный вектор извлеченного ЦВЗ
+    """
+    coeff_pairs = [
+        ('sa3', 'alf3sa', 'T3'),
+        ('sh3', 'alf3', 'T3'),
+        ('sv3', 'alf3', 'T3'),
+        ('sd3', 'alf3', 'T3'),
+        ('sh2', 'alf2', 'T2'),
+        ('sv2', 'alf2', 'T2'),
+        ('sd2', 'alf2', 'T2'),
+        ('sh1', 'alf1', 'T1'),
+        ('sv1', 'alf1', 'T1'),
+        ('sd1', 'alf1', 'T1')
+    ]
+    
+    watermark = []
+    for coeff, alpha_key, threshold_key in coeff_pairs:
+        orig = original_coeffs[coeff]
+        mod = modified_coeffs[coeff]
+        mask = (orig > thresholds[threshold_key]) & (orig != 0)
+        wm_bits = (mod[mask] - orig[mask]) / (alpha[alpha_key] * orig[mask])
+        watermark.append(wm_bits.flatten())
+    
+    return np.concatenate(watermark)
+
+def binary_threshold(data):
+    """
+    Преобразует входные данные в бинарные значения:
+    - Если элемент < 0 → 0
+    - Если элемент >= 0 → 1
+    
+    Параметры:
+        data: list или np.array
+        
+    Возвращает:
+        np.array с бинарными значениями
+    """
+    arr = np.asarray(data)  # Конвертируем в массив NumPy
+    return np.where(arr < 0, 0, 1).astype(np.uint8)
+
+
+if __name__ == "__main__":
+    image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
+    cv2.imshow('original1', image)
+    message = text_to_bits(read_text_from_file('./Kim/input_message.txt'))
+    embed = encode(image, message)
+
+
+    C, S, coeffs = haar_2d_decomposition_with_C_S(image, levels=3)
+    T1, T2, T3 = find_top3_from_coeffs(coeffs)
+    R3, RR3 = coeffs[1][0].shape  # Получаем (число строк, число столбцов) coeffs[1][0] = sh3
+    R2, RR2 = coeffs[2][0].shape  # Получаем (число строк, число столбцов) coeffs[2][0] = sh2
+    R1, RR1 = coeffs[3][0].shape  # Получаем (число строк, число столбцов) coeffs[3][0] = sh1
+
+    coeffs_dict, thresholds, alpha, sizes = list2dict_coeff(coeffs, T3, T2, T1)
+
+    modified_C,  modified_S, mod_coeffs = haar_2d_decomposition_with_C_S(embed)
+    # После встраивания ЦВЗ (как в предыдущих примерах)
+    original_coeffs = {
+        'sa3': coeffs[0], 'sh3': coeffs[1][0], 'sv3': coeffs[1][1], 'sd3': coeffs[1][2],
+        'sh2': coeffs[2][0], 'sv2': coeffs[2][1], 'sd2': coeffs[2][2],
+        'sh1': coeffs[3][0], 'sv1': coeffs[3][1], 'sd1': coeffs[3][2]
+    }    
+    modified_coeffs = {
+        'sa3': mod_coeffs[0], 'sh3': mod_coeffs[1][0], 'sv3': mod_coeffs[1][1], 'sd3': mod_coeffs[1][2],
+        'sh2': mod_coeffs[2][0], 'sv2': mod_coeffs[2][1], 'sd2': mod_coeffs[2][2],
+        'sh1': mod_coeffs[3][0], 'sv1': mod_coeffs[3][1], 'sd1': mod_coeffs[3][2]
+    }
+
+    thresholds = {'T1': T1, 'T2': T2, 'T3': T3}
+    alpha = {'alf1': alf1, 'alf2': alf2, 'alf3': alf3, 'alf3sa': alf3sa}
+
+    extracted_watermark = extract_watermark_all_fast(original_coeffs, modified_coeffs, thresholds, alpha)
+    bin_message = binary_threshold(extracted_watermark)
+
+
+    cv2.imshow('embed', embed)
+
     
 
 
