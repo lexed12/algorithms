@@ -289,14 +289,7 @@ def binary_threshold(data):
     arr = np.asarray(data)  # Конвертируем в массив NumPy
     return np.where(arr < 0, 0, 1).astype(np.uint8)
 
-
-if __name__ == "__main__":
-    image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
-    cv2.imshow('original1', image)
-    message = text_to_bits(read_text_from_file('./Kim/input_message.txt'))
-    embed = encode(image, message)
-
-
+def decode():
     C, S, coeffs = haar_2d_decomposition_with_C_S(image, levels=3)
     T1, T2, T3 = find_top3_from_coeffs(coeffs)
     R3, RR3 = coeffs[1][0].shape  # Получаем (число строк, число столбцов) coeffs[1][0] = sh3
@@ -323,11 +316,53 @@ if __name__ == "__main__":
 
     extracted_watermark = extract_watermark_all_fast(original_coeffs, modified_coeffs, thresholds, alpha)
     bin_message = binary_threshold(extracted_watermark)
+    return bin_message
+
+def calculate_correct_bits_percentage(original_bits, decoded_bits):
+    """
+    Вычисляет процент верных бит между двумя битовыми последовательностями.
+    
+    :param original_bits: Исходная битовая последовательность (строка из 0 и 1).
+    :param decoded_bits: Декодированная битовая последовательность (строка из 0 и 1).
+    :return: Процент верных бит.
+    """
+    if len(original_bits) != len(decoded_bits):
+        raise ValueError("Длины исходной и декодированной последовательностей должны совпадать.")
+    
+    # Считаем количество совпавших бит
+    correct_bits = sum(o == d for o, d in zip(original_bits, decoded_bits))
+    print("Количество правильных бит: " ,correct_bits)
+    # Вычисляем процент верных бит
+    total_bits = len(original_bits)
+    percentage = (correct_bits / total_bits) * 100
+    
+    return percentage
+
+def numb2symb(arr):
+    binary_string = ''.join(arr.astype(str))
+    return binary_string
+
+def limit_decoded_bits(original_bits, decoded_length):
+    """Ограничивает исходное сообщение по длине декодированного."""
+    if len(original_bits) > decoded_length:
+        return original_bits[:decoded_length]  # Обрезаем лишние биты
+    else:
+        return original_bits.ljust(decoded_length, '0')  # Дополняем нулями
+
+if __name__ == "__main__":
+    image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
+    cv2.imshow('original1', image)
+    message = text_to_bits(read_text_from_file('./Kim/input_message.txt'))
+    embed = encode(image, message)
+    embedded_message = decode()
+    embedded_message = numb2symb(embedded_message)
+    message = limit_decoded_bits(message,len(embedded_message))
+    print(calculate_correct_bits_percentage(message,embedded_message))
+
 
 
     cv2.imshow('embed', embed)
-
-    
+ 
 
 
     rows, height = image.shape
