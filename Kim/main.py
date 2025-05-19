@@ -165,6 +165,63 @@ def list2dict_coeff(coeffs,
     return coeffs_dict, thresholds, alpha, sizes
 
 
+def fill_C_vector_fast(C, modified_coeffs):
+    """
+    Быстрое заполнение вектора C коэффициентами.
+    Требует, чтобы C был одномерным массивом достаточной длины.
+    """
+    index = 0
+    for coeff in ['sa3', 'sh3', 'sv3', 'sd3', 'sh2', 'sv2', 'sd2', 'sh1', 'sv1', 'sd1']:
+        if coeff in modified_coeffs:
+            data = modified_coeffs[coeff].flatten()
+            end_idx = index + len(data)
+            
+            # Проверка переполнения
+            if end_idx > len(C):
+                raise ValueError(f"Недостаточно места в C для коэффициента {coeff}")
+                
+            C[index:end_idx] = data
+            index = end_idx
+    return C
+
+def inverse_haar_transform(modified_coeffs, original_structure=None):
+    """
+    Выполняет обратное 2D DWT Хаара с проверкой структуры.
+    
+    Параметры:
+        modified_coeffs (dict): Модифицированные коэффициенты 
+        original_structure (list): Опционально - структура из pywt.wavedec2
+        
+    Возвращает:
+        np.array: Восстановленное изображение
+    """
+    # Автоматическое определение структуры, если не указана
+    if original_structure is None:
+        coeffs_list = [
+            modified_coeffs['sa3'],
+            (modified_coeffs['sh3'], modified_coeffs['sv3'], modified_coeffs['sd3']),
+            (modified_coeffs['sh2'], modified_coeffs['sv2'], modified_coeffs['sd2']),
+            (modified_coeffs['sh1'], modified_coeffs['sv1'], modified_coeffs['sd1'])
+        ]
+    else:
+        # Используем original_structure как шаблон
+        coeffs_list = [modified_coeffs.get('sa3', original_structure[0])]
+        for i in range(1, len(original_structure)):
+            coeffs_list.append((
+                modified_coeffs.get(f'sh{4-i}', original_structure[i][0]),
+                modified_coeffs.get(f'sv{4-i}', original_structure[i][1]),
+                modified_coeffs.get(f'sd{4-i}', original_structure[i][2])
+            ))
+    
+    # Обратное преобразование
+    reconstructed = pywt.waverec2(coeffs_list, 'haar')
+    
+    # Нормализация
+    reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
+
+
+    return reconstructed
+
 if __name__ == "__main__":
     image = cv2.cvtColor(cv2.imread('./Kim/les.jpg'), cv2.COLOR_BGR2GRAY)
     cv2.imshow('original1', image)
@@ -180,6 +237,18 @@ if __name__ == "__main__":
     modified_coeffs = process_wavelet_coeffs(coeffs_dict, thresholds, alpha, message)
 
 
+    # Вычисляем общий размер всех коэффициентов
+    # total_size = 0
+    # for coeff in ['sa3', 'sh3', 'sv3', 'sd3', 'sh2', 'sv2', 'sd2', 'sh1', 'sv1', 'sd1']:
+    #     if coeff in modified_coeffs:
+    #         total_size += modified_coeffs[coeff].size  # Используем .size вместо len()
+
+    # Создаем вектор нужного размера
+    #C = np.zeros(total_size)
+
+
+    #С = fill_C_vector_fast(C,modified_coeffs)
+    cv2.imshow('embed', inverse_haar_transform(modified_coeffs, coeffs))
     
 
 
