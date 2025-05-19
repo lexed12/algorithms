@@ -2,48 +2,26 @@ import cv2
 import numpy as np
 from translate import *
 
-def check_message_capacity(image_path, message):
-    """Проверяет, поместится ли сообщение в изображение и выводит информацию"""
-    # Читаем изображение в grayscale
+def calculate_max_capacity(image_path):
+    """Рассчитывает максимальную вместимость изображения в символах"""
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ValueError("Изображение не найдено или путь неверный")
     
     height, width = img.shape
     total_pixels = height * width
-    
-    # Вычисляем доступную вместимость
-    max_bits = total_pixels
-    max_bytes = max_bits // 8
+    max_bytes = total_pixels // 8
     max_chars = max_bytes - 2  # -2 для маркера конца
     
-    # Длина сообщения в битах (каждый символ = 8 бит)
-    required_bits = len(message) * 8 + 16  # +16 для маркера конца
-    
-    print("\n=== Анализ вместимости ===")
-    print(f"Размер изображения: {width}x{height} пикселей")
-    print(f"Всего пикселей: {total_pixels:,}")
-    print(f"Макс. вместимость: {max_chars:,} символов")
-    print(f"Длина вашего сообщения: {len(message)} символов")
-    print(f"Требуется бит: {required_bits} из доступных {max_bits}")
-    
-    if required_bits > max_bits:
-        excess = required_bits - max_bits
-        print(f"\n⚠️ Ошибка: Сообщение слишком большое!")
-        print(f"Превышение на {excess} бит (~{excess//8} символов)")
-        return False
-    else:
-        remaining = max_bits - required_bits
-        print(f"\n✓ Сообщение поместится!")
-        print(f"Останется свободных бит: {remaining} (~{remaining//8} символов)")
-        return True
+    return max_chars
 
-def encode_lsb_grayscale(input_image_path, output_image_path, secret_message):
+def encode_lsb_grayscale_safe(input_image_path, output_image_path, secret_message):
     """
-    Скрывает сообщение в черно-белом изображении используя LSB-метод
-    :param input_image_path: путь к исходному изображению (например, 'cat.png')
+    Скрывает сообщение в черно-белом изображении, обрезая его если нужно
+    :param input_image_path: путь к исходному изображению
     :param output_image_path: путь для сохранения изображения со скрытым сообщением
-    :param secret_message: сообщение для скрытия
+    :param secret_message: сообщение для скрытия (будет обрезано если слишком большое)
+    :return: tuple (успешность операции, фактически встроенное сообщение)
     """
     # Читаем изображение в grayscale
     img = cv2.imread(input_image_path, cv2.IMREAD_GRAYSCALE)
@@ -51,18 +29,18 @@ def encode_lsb_grayscale(input_image_path, output_image_path, secret_message):
         raise ValueError("Изображение не найдено или путь неверный")
     
     height, width = img.shape
+    max_chars = calculate_max_capacity(input_image_path)
+    
+    # Обрезаем сообщение если оно слишком длинное
+    if len(secret_message) > max_chars:
+        truncated_message = secret_message[:max_chars]
+        print(f"Предупреждение: Сообщение обрезано до {max_chars} символов")
+    else:
+        truncated_message = secret_message
     
     # Преобразуем сообщение в бинарный формат
-    binary_message = ''.join([format(ord(i), '08b') for i in secret_message])
-    message_length = len(binary_message)
-    
-    # Проверяем, поместится ли сообщение в изображение
-    max_message_size = height * width  # Только один канал
-    if message_length > max_message_size:
-        raise ValueError(f"Сообщение слишком большое. Максимум: {max_message_size//8} символов")
-    
-    # Добавляем маркер конца сообщения
-    binary_message += '1111111111111110'  # 0xFFFE в бинарном виде
+    binary_message = ''.join([format(ord(i), '08b') for i in truncated_message])
+    binary_message += '1111111111111110'  # Маркер конца
     
     # Создаем копию изображения для модификации
     encoded_img = img.copy()
@@ -82,20 +60,15 @@ def encode_lsb_grayscale(input_image_path, output_image_path, secret_message):
     
     # Сохраняем изображение
     cv2.imwrite(output_image_path, encoded_img)
-    print(f"Сообщение успешно скрыто в {output_image_path}")
+    return True, truncated_message
 
 def decode_lsb_grayscale(encoded_image_path):
-    """
-    Извлекает скрытое сообщение из черно-белого изображения
-    :param encoded_image_path: путь к изображению со скрытым сообщением
-    :return: извлеченное сообщение
-    """
+    """Извлекает скрытое сообщение из черно-белого изображения"""
     img = cv2.imread(encoded_image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ValueError("Изображение не найдено или путь неверный")
     
     height, width = img.shape
-    
     binary_message = ""
     
     # Проходим по каждому пикселю
@@ -115,33 +88,28 @@ def decode_lsb_grayscale(encoded_image_path):
     
     return ""
 
-def encode_lsb_grayscale_checked(input_image_path, output_image_path, secret_message):
-    """Скрывает сообщение с предварительной проверкой"""
-    if not check_message_capacity(input_image_path, secret_message):
-        return False
-    
-    try:
-        encode_lsb_grayscale(input_image_path, output_image_path, secret_message)
-        return True
-    except Exception as e:
-        print(f"Ошибка при кодировании: {e}")
-        return False
-
 if __name__ == "__main__":
     # Пример использования
-    input_image = "./LSB/cat.png"  # Черно-белая версия изображения
+    input_image = "./LSB/cat.png"
     output_image = "./LSB/encoded.png"
     dir_sec_msg = "./LSB/input_message.txt"
-    secret_msg = "Secret_message"
     
-
-    save_text_to_file("./LSB/input_message_bit.txt", text_to_bits(read_text_from_file(dir_sec_msg)))
-    secret_msg = read_text_from_file("./LSB/input_message.txt")
-
+    # Читаем сообщение из файла
+    secret_msg = read_text_from_file(dir_sec_msg)
+    
+    # Сохраняем битовое представление (для отладки)
+    save_text_to_file("./LSB/input_message_bit.txt", text_to_bits(secret_msg))
+    
     try:
-        if encode_lsb_grayscale_checked(input_image, output_image, secret_msg):
+        # Пытаемся встроить сообщение (с автоматическим обрезанием если нужно)
+        success, embedded_msg = encode_lsb_grayscale_safe(input_image, output_image, secret_msg)
+        
+        if success:
+            print(f"Успешно встроено {len(embedded_msg)} символов из {len(secret_msg)}")
+            
+            # Извлекаем сообщение для проверки
             decoded = decode_lsb_grayscale(output_image)
-            #print(f"\nУспешно! Извлечённое сообщение: '{decoded}'")
+            print(f"Извлечённое сообщение: '{decoded}'")
             
             # Визуализация
             original = cv2.imread(input_image, cv2.IMREAD_GRAYSCALE)
