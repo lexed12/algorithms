@@ -157,7 +157,7 @@ def sum_2d_array(arr):
 
 
 
-P = 200.0 #Порог различения
+P = 40.0 #Порог различения
 PL = 5000.0 #Порог сверху
 PH = 0.0 #Порог снизу
 
@@ -193,13 +193,14 @@ def embed_bits(dct_seg, bit_sequence,N_bit):
     embed_image = dct_seg
     for a in embed_image:
         if (block_suitability(a) == 1):
-            if (bit_sequence[i] == "0"):
+            if (bit_sequence[i] == '0'):
                 wmin = min(a[u1,v1],a[u2,v2])
                 a[u3,v3] = wmin - P_dif
                 if wmin == a[u1,v1]:
                     a[u1,v1] = a[u1,v1] + P_dif
                 if wmin == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] + P_dif
+                i += 1
             else:
                 wmax = max(a[u1,v1],a[u2,v2])
                 a[u3,v3] = wmax + P_dif
@@ -207,6 +208,7 @@ def embed_bits(dct_seg, bit_sequence,N_bit):
                     a[u1,v1] = a[u1,v1] - P_dif
                 if wmax == a[u2,v2]:
                     a[u2,v2] = a[u2,v2] - P_dif
+                i += 1
     return embed_image
 
 def separ_bits(im):

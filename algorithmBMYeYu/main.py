@@ -8,7 +8,7 @@ import os
 
 
 
-image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/cat.png'), cv2.COLOR_BGR2GRAY)
+image = cv2.cvtColor(cv2.imread('./algorithmBMYeYu/les.jpg'), cv2.COLOR_BGR2GRAY)
 rows, height = image.shape
 
 def bits_to_numbers(bits):
@@ -113,16 +113,16 @@ print("MSE:", mse)
 
 # Пример использования
 # Загружаем изображения
-original_image = cv2.imread('./algorithmBMYeYu/les.jpg', cv2.IMREAD_GRAYSCALE)
-encoded_image = cv2.imread('./algorithmBMYeYu/.jpg', cv2.IMREAD_GRAYSCALE)
+# original_image = cv2.imread('./algorithmBMYeYu/les.jpg', cv2.IMREAD_GRAYSCALE)
+# encoded_image = cv2.imread('./algorithmBMYeYu/.jpg', cv2.IMREAD_GRAYSCALE)
 
-# # Вычисляем PSNR
-# psnr_value = calculate_psnr(original_image, encoded_image)
-# print(f"PSNR: {psnr_value:.2f} dB")
+# Вычисляем PSNR
+psnr_value = calculate_psnr(image, container)
+print(f"PSNR: {psnr_value:.2f} dB")
 
 
 
-# percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
-# print(f"Процент верных бит: {percentage:.2f}%")
-cv2.imshow('embedded image',encoded_image)
+percentage = calculate_correct_bits_percentage(original_numbers, decoded_numbers)
+print(f"Процент верных бит: {percentage:.2f}%")
+#cv2.imshow('embedded image',encoded_image)
 cv2.waitKey(0)
